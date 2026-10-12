@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASCII Banner Generator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+pre { font-family:'Courier New',Courier,monospace; }
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen p-4">
+<div class="max-w-4xl mx-auto">
+  <h1 class="text-2xl font-bold text-cyan-400 mb-1">ASCII Banner Generator</h1>
+  <p class="text-gray-400 text-sm mb-5">Type text (A-Z, 0-9) and render it in 5 FIGlet-style fonts.</p>
+
+  <!-- Input -->
+  <div class="bg-gray-900 border border-gray-700 rounded-xl p-4 mb-5">
+    <div class="flex gap-3 items-end">
+      <div class="flex-1">
+        <label for="textInput" class="block text-sm font-semibold text-gray-300 mb-1">Input Text</label>
+        <input type="text" id="textInput" maxlength="20" placeholder="HELLO"
+          class="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2.5 text-lg tracking-widest focus:outline-none focus:border-cyan-400 uppercase"
+          oninput="renderAll()">
+      </div>
+      <div class="text-xs text-gray-500 pb-3" id="charCount">0/20 chars</div>
+    </div>
+    <div class="text-xs text-gray-500 mt-1">Characters: A–Z, 0–9, space only. Other characters are ignored.</div>
+  </div>
+
+  <!-- Font tabs -->
+  <div class="flex flex-wrap gap-2 mb-4" id="fontTabs"></div>
+
+  <!-- Output -->
+  <div id="outputArea" class="bg-gray-900 border border-gray-700 rounded-xl p-4">
+    <div class="flex justify-between items-center mb-3">
+      <span id="fontLabel" class="text-cyan-300 font-semibold text-sm"></span>
+      <button onclick="copyToClipboard()" class="bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-semibold px-4 py-1.5 rounded transition" aria-label="Copy ASCII art to clipboard">Copy to Clipboard</button>
+    </div>
+    <pre id="output" class="text-green-300 text-xs leading-tight overflow-x-auto whitespace-pre select-all"></pre>
+    <div id="copyMsg" class="text-green-400 text-xs mt-2 hidden">Copied!</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// FONT DATA: 5-row pixel letter maps
+// Each letter = array of 5 strings (rows), width determined by string length
+// ============================================================
+
+// FONT 1: "block" — 5×5 using # and space
+const BLOCK = {
+  ' ': ['   ','   ','   ','   ','   '],
+  'A': ['###','# #','###','# #','# #'],
+  'B': ['## ','# #','## ','# #','## '],
+  'C': ['###','#  ','#  ','#  ','###'],
+  'D': ['## ','# #','# #','# #','## '],
+  'E': ['###','#  ','## ','#  ','###'],
+  'F': ['###','#  ','## ','#  ','#  '],
+  'G': ['###','#  ','# #','# #','###'],
+  'H': ['# #','# #','###','# #','# #'],
+  'I': ['###',' # ',' # ',' # ','###'],
+  'J': ['###',' # ',' # ','## ','## '],
+  'K': ['# #','## ','#  ','## ','# #'],
+  'L': ['#  ','#  ','#  ','#  ','###'],
+  'M': ['# #','###','# #','# #','# #'],
+  'N': ['# #','###','###','# #','# #'],
+  'O': ['###','# #','# #','# #','###'],
+  'P': ['###','# #','###','#  ','#  '],
+  'Q': ['###','# #','# #','## ','###'],
+  'R': ['###','# #','###','## ','# #'],
+  'S': ['###','#  ','###','  #','###'],
+  'T': ['###',' # ',' # ',' # ',' # '],
+  'U': ['# #','# #','# #','# #','###'],
+  'V': ['# #','# #','# #',' # ',' # '],
+  'W': ['# #','# #','# #','###','# #'],
+  'X': ['# #','# #',' # ','# #','# #'],
+  'Y': ['# #','# #',' # ',' # ',' # '],
+  'Z': ['###','  #',' # ','#  ','###'],
+  '0': ['###','# #','# #','# #','###'],
+  '1': [' # ','## ',' # ',' # ','###'],
+  '2': ['###','  #','###','#  ','###'],
+  '3': ['###','  #',' ##','  #','###'],
+  '4': ['# #','# #','###','  #','  #'],
+  '5': ['###','#  ','###','  #','###'],
+  '6': ['###','#  ','###','# #','###'],
+  '7': ['###','  #','  #','  #','  #'],
+  '8': ['###','# #','###','# #','###'],
+  '9': ['###','# #','###','  #','###'],
+};
+
+// FONT 2: "thin" — 4 rows using | and -
+const THIN = {
+  ' ': ['  ','  ','  ','  '],
+  'A': ['/\\','| ','|_','| '],
+  'B': ['|-','| \\','|-','|_/'],
+  'C': ['/|','| ','| ','\\|'],
+  'D': ['|-','| \\','| /','|-'],
+  'E': ['|-','|-','| ','|_'],
+  'F': ['|-','|-','| ','| '],
+  'G': ['/|',' - ','|_|','\\|'],
+  'H': ['| |','|_|','| |','| |'],
+  'I': ['-','|','|','-'],
+  'J': [' |',' |','\\|','-|'],
+  'K': ['|/','| ','|\\','| \\'],
+  'L': ['| ','| ','| ','|_'],
+  'M': ['|\\ /|','| V |','|   |','|   |'],
+  'N': ['|\\ |','| \\|','|  |','|  |'],
+  'O': ['/|\\','| |','| |','\\|/'],
+  'P': ['|-','| \\','|-','| '],
+  'Q': ['/|\\','| |','| |','\\|>'],
+  'R': ['|-','| /','|< ','| \\'],
+  'S': ['/|','\\ ','  \\','\\/ '],
+  'T': ['-|-',' | ',' | ',' | '],
+  'U': ['| |','| |','| |','\\|/'],
+  'V': ['| |','| |',' V ',' V '],
+  'W': ['|   |','|   |','| | |','\\___/'],
+  'X': ['\\  /','\\/ ','/\\ ','/ \\'],
+  'Y': ['\\  /','\\/ ',' | ',' | '],
+  'Z': ['-|',' /','/ ','-|'],
+  '0': ['/|\\','| |','| |','\\|/'],
+  '1': ['/|',' |',' |','_|_'],
+  '2': ['-|',' /','/ ','|-'],
+  '3': ['-|','  \\','  |','-/'],
+  '4': ['| |','|_|','  |','  |'],
+  '5': ['|-','|- ','  |','-/ '],
+  '6': ['/  ','|- ','| |','\\|/'],
+  '7': ['-|','  /','/ ',' | '],
+  '8': ['/|\\','|_|','| |','\\|/'],
+  '9': ['/|\\','|_|','  |',' \\_'],
+};
+
+// FONT 3: "shadow" — block font + dot shadow row below
+// We'll derive it from BLOCK but add a shadow row
+
+// FONT 4: "big" — 6-row, using * and space
+const BIG = {
+  ' ': ['     ','     ','     ','     ','     ','     '],
+  'A': [' *** ','*   *','*   *','*****','*   *','*   *'],
+  'B': ['**** ','*   *','**** ','*   *','*   *','**** '],
+  'C': [' ****','*    ','*    ','*    ','*    ',' ****'],
+  'D': ['**** ','*   *','*   *','*   *','*   *','**** '],
+  'E': ['*****','*    ','**** ','*    ','*    ','*****'],
+  'F': ['*****','*    ','**** ','*    ','*    ','*    '],
+  'G': [' ****','*    ','*    ','* ***','*   *',' ****'],
+  'H': ['*   *','*   *','*****','*   *','*   *','*   *'],
+  'I': ['*****','  *  ','  *  ','  *  ','  *  ','*****'],
+  'J': ['*****','   * ','   * ','   * ','*  * ',' **  '],
+  'K': ['*   *','*  * ','**   ','**   ','*  * ','*   *'],
+  'L': ['*    ','*    ','*    ','*    ','*    ','*****'],
+  'M': ['*   *','** **','* * *','*   *','*   *','*   *'],
+  'N': ['*   *','**  *','* * *','*  **','*   *','*   *'],
+  'O': [' *** ','*   *','*   *','*   *','*   *',' *** '],
+  'P': ['**** ','*   *','**** ','*    ','*    ','*    '],
+  'Q': [' *** ','*   *','*   *','* * *','*  **',' ** *'],
+  'R': ['**** ','*   *','**** ','**   ','* *  ','*   *'],
+  'S': [' ****','*    ',' *** ','    *','    *','**** '],
+  'T': ['*****','  *  ','  *  ','  *  ','  *  ','  *  '],
+  'U': ['*   *','*   *','*   *','*   *','*   *',' *** '],
+  'V': ['*   *','*   *','*   *','*   *',' * * ','  *  '],
+  'W': ['*   *','*   *','* * *','* * *','** **','*   *'],
+  'X': ['*   *',' * * ','  *  ',' * * ','*   *','*   *'],
+  'Y': ['*   *',' * * ','  *  ','  *  ','  *  ','  *  '],
+  'Z': ['*****','   * ','  *  ',' *   ','*    ','*****'],
+  '0': [' *** ','*   *','*  **','** * ','*   *',' *** '],
+  '1': ['  *  ',' **  ','  *  ','  *  ','  *  ','*****'],
+  '2': [' *** ','*   *','    *','  ** ','**   ','*****'],
+  '3': ['**** ','    *',' *** ','    *','    *','**** '],
+  '4': ['*   *','*   *','*****','    *','    *','    *'],
+  '5': ['*****','*    ','**** ','    *','    *','**** '],
+  '6': [' ****','*    ','**** ','*   *','*   *',' *** '],
+  '7': ['*****','    *','   * ','  *  ',' *   ','*    '],
+  '8': [' *** ','*   *',' *** ','*   *','*   *',' *** '],
+  '9': [' *** ','*   *','*****','    *','    *',' *** '],
+};
+
+// FONT 5: "banner" — all caps large letters using = and space (6 rows)
+const BANNER = {
+  ' ': ['      ','      ','      ','      ','      ','      '],
+  'A': ['  ==  ',' =  = ','======','=    =','=    =','=    ='],
+  'B': ['===== ','=    =','===== ','=    =','=    =','===== '],
+  'C': [' =====','=     ','=     ','=     ','=     ',' ====='],
+  'D': ['===== ','=    =','=    =','=    =','=    =','===== '],
+  'E': ['======','=     ','===== ','=     ','=     ','======'],
+  'F': ['======','=     ','===== ','=     ','=     ','=     '],
+  'G': [' =====','=     ','=     ','=  ===','=    =','======'],
+  'H': ['=    =','=    =','======','=    =','=    =','=    ='],
+  'I': ['======','  ==  ','  ==  ','  ==  ','  ==  ','======'],
+  'J': ['======','   =  ','   =  ','   =  ','=  =  ',' ===  '],
+  'K': ['=    =','=   = ','===   ','===   ','=   = ','=    ='],
+  'L': ['=     ','=     ','=     ','=     ','=     ','======'],
+  'M': ['=    =','==  ==','= == =','=    =','=    =','=    ='],
+  'N': ['=    =','==   =','= =  =','=  = =','=   ==','=    ='],
+  'O': [' ==== ','=    =','=    =','=    =','=    =',' ==== '],
+  'P': ['===== ','=    =','===== ','=     ','=     ','=     '],
+  'Q': [' ==== ','=    =','=    =','=  =  =','=   ==','======'],
+  'R': ['===== ','=    =','===== ','= =   ','=  =  ','=    ='],
+  'S': [' =====','=     ',' ==== ','     =','     =','===== '],
+  'T': ['======','  ==  ','  ==  ','  ==  ','  ==  ','  ==  '],
+  'U': ['=    =','=    =','=    =','=    =','=    =',' ==== '],
+  'V': ['=    =','=    =','=    =',' =  = ','  ==  ','  ==  '],
+  'W': ['=    =','=    =','=    =','= == =','==  ==','=    ='],
+  'X': ['=    =','= =  =',' ===  ',' ===  ','= =  =','=    ='],
+  'Y': ['=    =',' =  = ','  ==  ','  ==  ','  ==  ','  ==  '],
+  'Z': ['======','    = ','   =  ','  =   ',' =    ','======'],
+  '0': [' ==== ','=    =','=   ==','==   =','=    =',' ==== '],
+  '1': ['  ==  ',' ===  ','  ==  ','  ==  ','  ==  ','======'],
+  '2': [' ==== ','=    =','     =','  ===  ','==     ','======'],
+  '3': ['===== ','     =','===== ','     =','     =','===== '],
+  '4': ['=    =','=    =','======','     =','     =','     ='],
+  '5': ['======','=     ','===== ','     =','     =','===== '],
+  '6': [' =====','=     ','===== ','=    =','=    =',' ==== '],
+  '7': ['======','    = ','   =  ','  =   ',' =    ','=     '],
+  '8': [' ==== ','=    =',' ==== ','=    =','=    =',' ==== '],
+  '9': [' ==== ','=    =','======','     =','     =','===== '],
+};
+
+const FONTS = [
+  { id:'block',  label:'Block (#)',   data:BLOCK,  rows:5, sep:' ' },
+  { id:'thin',   label:'Thin (|/-)',  data:THIN,   rows:4, sep:' ' },
+  { id:'shadow', label:'Shadow (.)',  data:BLOCK,  rows:5, sep:' ', shadow:true },
+  { id:'big',    label:'Big (*)',     data:BIG,    rows:6, sep:' ' },
+  { id:'banner', label:'Banner (=)', data:BANNER, rows:6, sep:' ' },
+];
+
+let currentFont = 0;
+
+function sanitize(text) {
+  return text.toUpperCase().replace(/[^A-Z0-9 ]/g, '');
+}
+
+function renderFont(text, fontIdx) {
+  const font = FONTS[fontIdx];
+  const chars = text.split('');
+  if (chars.length === 0) return '';
+
+  const lines = [];
+  for (let row = 0; row < font.rows; row++) lines.push('');
+
+  chars.forEach(ch => {
+    const glyph = font.data[ch] || font.data[' '];
+    for (let row = 0; row < font.rows; row++) {
+      lines[row] += (glyph[row] || '   ') + font.sep;
+    }
+  });
+
+  if (font.shadow) {
+    // Add a shadow row: shift each '#' one position right and down with '.'
+    const shadowLines = lines.map((l, ri) => {
+      if (ri === 0) return l;
+      // shadow: previous row's '#' becomes '.' in current row shifted right
+      const prev = lines[ri-1];
+      let sh = '';
+      for (let i = 0; i < prev.length; i++) {
+        sh += (i > 0 && prev[i-1] === '#') ? '.' : ' ';
+      }
+      // Merge: original takes priority
+      let merged = '';
+      for (let i = 0; i < Math.max(l.length, sh.length); i++) {
+        const o = l[i] || ' ';
+        const s = sh[i] || ' ';
+        merged += o !== ' ' ? o : s;
+      }
+      return merged;
+    });
+    // Add one extra shadow row below last
+    const lastRow = lines[lines.length-1];
+    let shadowRow = '';
+    for (let i = 0; i < lastRow.length; i++) {
+      shadowRow += (i > 0 && lastRow[i-1] === '#') ? '.' : ' ';
+    }
+    return [...shadowLines, shadowRow].join('\n');
+  }
+
+  return lines.join('\n');
+}
+
+function renderAll() {
+  const raw = document.getElementById('textInput').value;
+  const text = sanitize(raw);
+  document.getElementById('charCount').textContent = `${text.replace(/ /g,'').length}/20 chars`;
+  document.getElementById('textInput').value = raw.toUpperCase();
+
+  if (!text.trim()) {
+    document.getElementById('output').textContent = 'Enter text above to generate ASCII art.';
+    document.getElementById('fontLabel').textContent = '';
+    return;
+  }
+
+  const output = renderFont(text, currentFont);
+  document.getElementById('output').textContent = output;
+  document.getElementById('fontLabel').textContent = FONTS[currentFont].label;
+  document.getElementById('copyMsg').classList.add('hidden');
+}
+
+function setFont(idx) {
+  currentFont = idx;
+  document.querySelectorAll('.font-tab').forEach((btn, i) => {
+    btn.className = btn.className.replace(i === idx ? ' bg-gray-800 text-gray-300' : ' bg-cyan-700 text-white',
+      i === idx ? ' bg-cyan-700 text-white' : ' bg-gray-800 text-gray-300');
+    btn.setAttribute('aria-pressed', i === idx ? 'true' : 'false');
+  });
+  renderAll();
+}
+
+function buildTabs() {
+  const container = document.getElementById('fontTabs');
+  FONTS.forEach((f, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'font-tab px-3 py-1.5 rounded text-sm font-semibold transition ' +
+      (i === 0 ? 'bg-cyan-700 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700');
+    btn.textContent = f.label;
+    btn.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+    btn.setAttribute('aria-label', `Select font: ${f.label}`);
+    btn.onclick = () => setFont(i);
+    container.appendChild(btn);
+  });
+}
+
+function copyToClipboard() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard?.writeText(text).then(() => {
+    const msg = document.getElementById('copyMsg');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const msg = document.getElementById('copyMsg');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 2000);
+  });
+}
+
+buildTabs();
+document.getElementById('textInput').value = 'HELLO';
+renderAll();
+</script>
+</body>
+</html>
